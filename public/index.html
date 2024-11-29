@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Bet Tracker</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f9f9f9;
+        }
+
+        header {
+            background-color: #4caf50;
+            color: white;
+            padding: 10px 20px;
+            text-align: center;
+        }
+
+        main {
+            padding: 20px;
+            max-width: 800px;
+            margin: auto;
+        }
+
+        .stats,
+        .bets-table {
+            background-color: white;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+        }
+
+        .stats h2,
+        .bets-table h2 {
+            margin-top: 0;
+        }
+
+        .stats .input-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .stats .input-group input {
+            padding: 8px;
+            font-size: 16px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            min-width: 100px;
+        }
+
+        .bets-table table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+
+        .bets-table table,
+        .bets-table th,
+        .bets-table td {
+            border: 1px solid #ddd;
+        }
+
+        .bets-table th,
+        .bets-table td {
+            padding: 10px;
+            text-align: center;
+        }
+
+        .bets-table th {
+            background-color: #4caf50;
+            color: white;
+        }
+
+        .profit {
+            font-weight: bold;
+            font-size: 20px;
+            color: #4caf50;
+        }
+
+        .lost {
+            color: red;
+        }
+
+        .won {
+            color: green;
+        }
+
+        .btn {
+            width: 100px;
+            height: 40px;
+            cursor: pointer;
+            border-radius: 5px;
+            outline: none;
+            border: none;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+            font-size: 15px;
+            font-weight: 700;
+            text-align: center;
+            cursor: none;
+        }
+
+        .stop {
+            background-color: orangered;
+        }
+
+        .start {
+            background-color: #4caf50;
+        }
+
+        .wrap {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: left;
+            align-items: center;
+            margin: 5px;
+        }
+
+        #updateStake {
+            min-width: 100px;
+            height: 40px;
+            border-radius: 5px;
+            background-color: #4caf50;
+            outline: none;
+            border: none;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+            font-size: 15px;
+            font-weight: 700;
+            text-align: center;
+            cursor: pointer;
+        }
+
+        #currency {
+            width: 150px;
+            height: 40px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+
+        .column {
+            display: flex;
+            flex-direction: column;
+            column-gap: 5px;
+        }
+
+        .row {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            column-gap: 5px;
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <h1>Bet Tracker</h1>
+    </header>
+    <main>
+        <section class="stats">
+            <input class="btn" type="input" id="bot_status" name="Stop" />
+            <h2>Total Profit</h2>
+            <p class="profit" id="totalProfit">Loading...</p>
+            <div class="input-group wrap">
+                <div class="row">
+                    <label for="stake">Change Stake:</label>
+                    <input type="text" id="stake" placeholder="Enter new stake" />
+                </div>
+
+                <div class="input-group">
+                    <label for="currency">Symbol:</label>
+                    <select id="currency" required>
+                        <option value="R_100">Volatility 100 Index</option>
+                        <option value="1HZ100V">Volatility 100 (1s) Index</option>
+                        <option value="R_75">Volatility 75 Index</option>
+                        <option value="1HZ75V">Volatility 75 (1s) Index</option>
+                        <option value="1HZ50V">Volatility 50 (1s) Index</option>
+                        <option value="R_50">Volatility 50 Index</option>
+                        <option value="R_25">Volatility 25 Index</option>
+                        <option value="1HZ25V">Volatility 25 (1s) Index</option>
+                    </select>
+                </div>
+                <div class="row">
+                    <label for="appId">App ID:</label>
+                    <input type="text" id="appId" placeholder="Enter App ID" />
+                </div>
+                <div class="row">
+                    <label for="token">Deriv Token:</label>
+                    <input type="text" id="token" placeholder="Enter Deriv Token" />
+                </div>
+
+                <div class="row">
+                    <label for="dt">Delay Time:</label>
+                    <input type="text" id="dt" placeholder="Enter Delay Time" />
+                </div>
+                <div class="row">
+                    <label for="tp">Take Profit (TP):</label>
+                    <input type="text" id="tp" placeholder="Enter Take Profit" />
+                </div>
+                <div class="row">
+                    <label for="sl">Stop Loss (SL):</label>
+                    <input type="text" id="sl" placeholder="Enter Stop Loss" />
+                </div>
+                <input type="hidden" id="Id" />
+
+            </div>
+            <div class="column">
+                <button id="updateStake" onclick="updateStake()">
+                    Update Stake Details
+                </button>
+                <a href="/create" class="profit">Create Stake Info</a>
+            </div>
+
+        </section>
+        <section class="bets-table">
+            <h2>Bets Summary</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Contract ID</th>
+                        <th>Bet Amount</th>
+                        <th>Status</th>
+                        <th>Profit/Loss</th>
+                    </tr>
+                </thead>
+                <tbody id="betsTableBody">
+                    <!-- Rows will be dynamically populated -->
+                </tbody>
+            </table>
+        </section>
+    </main>
+
+    <script>
+        // Fetch the stake, currency, and appId values when the page loads
+        async function fetchStakeDetails() {
+            try {
+                const response = await fetch("/api/getstake");
+                const stakeDetails = await response.json();
+
+                if (stakeDetails) {
+                    document.getElementById("stake").value =
+                        stakeDetails.stake;
+                    document.getElementById("currency").value =
+                        stakeDetails.currency;
+                    document.getElementById("appId").value =
+                        stakeDetails.appId;
+                    document.getElementById("Id").value = stakeDetails.id;
+
+                    if (stakeDetails.status === "active") {
+                        document.getElementById("bot_status").value = "stopped";
+                        document.getElementById("bot_status").classList.add("stop");
+
+                    } else if (stakeDetails.status === "stopped") {
+                        document.getElementById("bot_status").name = "Start";
+                        document.getElementById("bot_status").value = "active";
+                        document.getElementById("bot_status").classList.add("start");
+                    }
+                }
+            } catch (error) {
+                console.error("Error fetching stake details:", error);
+            }
+        }
+
+        // Function to fetch bets and populate the table
+        async function fetchBets() {
+            try {
+                const response = await fetch("/api/bets");
+                const bets = await response.json();
+                console.log(bets)
+
+                const betsTableBody =
+                    document.getElementById("betsTableBody");
+                betsTableBody.innerHTML = ""; // Clear existing rows
+
+                let totalProfit = 0;
+                let displayedContractIds = new Set(); // Track contract IDs
+
+                // Loop through each bet to display in the table
+                bets.forEach((bet) => {
+                    if (!displayedContractIds.has(bet.contractId)) {
+                        // Avoid adding duplicate contract_id
+                        const row = document.createElement("tr");
+
+                        const contractIdCell = document.createElement("td");
+                        contractIdCell.textContent = bet.contractId; // Display contract_id from DB
+
+                        const amountCell = document.createElement("td");
+                        amountCell.textContent =
+                            bet.betAmount === null
+                                ? "N/A"
+                                : `$${parseFloat(bet.betAmount).toFixed(2)}`; // Handle null bet_amount
+                        amountCell.className =
+                            bet.betAmount === null ? "lost" : "";
+
+                        const statusCell = document.createElement("td");
+                        statusCell.textContent =
+                            bet.status.charAt(0).toUpperCase() +
+                            bet.status.slice(1); // Capitalize status
+                        statusCell.className =
+                            bet.status === "lost" ? "lost" : "won";
+
+                        const profitCell = document.createElement("td");
+                        profitCell.textContent =
+                            bet.profit === null
+                                ? "N/A"
+                                : `$${bet.profit.toFixed(2)}`; // Handle null profit
+                        profitCell.className =
+                            bet.profit > 0
+                                ? "won"
+                                : bet.profit < 0
+                                    ? "lost"
+                                    : ""; // Color based on profit
+
+                        row.appendChild(contractIdCell);
+                        row.appendChild(amountCell);
+                        row.appendChild(statusCell);
+                        row.appendChild(profitCell);
+
+                        betsTableBody.appendChild(row);
+
+                        totalProfit += bet.profit;
+                        displayedContractIds.add(bet.contractId);
+
+                        console.log("Total Profit:", totalProfit);
+                        document.getElementById("totalProfit").textContent =
+                            `$${totalProfit.toFixed(2)}`;
+                    }
+                });
+            } catch (error) {
+                console.error("Error fetching bets:", error);
+            }
+        }
+
+        // Function to update the stake, currency, and appId
+        async function updateStake() {
+            const stakeInput = document.getElementById("stake");
+            const currencyInput = document.getElementById("currency");
+            const appIdInput = document.getElementById("appId");
+            const IdInput = document.getElementById("Id");
+            const StatusInput = document.getElementById("bot_status");
+            console.log()
+
+            const newStake = parseFloat(stakeInput.value);
+            const newCurrency = currencyInput.value.trim();
+            const newAppId = parseInt(appIdInput.value);
+            const Id = parseInt(IdInput.value);
+            const bot_status = StatusInput.value;
+
+            if (
+                !isNaN(newStake) &&
+                newStake > 0 &&
+                newCurrency &&
+                !isNaN(newAppId)
+            ) {
+                // Send update request to the backend
+                try {
+                    const response = await fetch("/api/updatestake", {
+                        method: "PUT",
+                        headers: {
+                            "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify({
+                            id: Id,
+                            stake: newStake,
+                            currency: newCurrency,
+                            appId: parseInt(newAppId),
+                            status: bot_status
+                        }),
+                    });
+
+                    if (response.ok) {
+                        alert(
+                            `Stake updated to $${newStake}, Currency: ${newCurrency}, App ID: ${newAppId}`,
+                        );
+                        fetchStakeDetails();
+                    } else {
+                        alert("Failed to update stake details.");
+                    }
+                } catch (error) {
+                    alert("Error updating stake details.");
+                    console.error("Error:", error);
+                }
+            } else {
+                alert("Please enter valid stake, currency, and app ID.");
+            }
+        }
+
+        // Initialize by fetching stake details and bets data
+        fetchStakeDetails();
+        setInterval(fetchBets, 1000); // Refresh bets every 1 second
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "Bet" ALTER COLUMN "contractId" SET DATA TYPE BIGINT;
