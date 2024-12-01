@@ -1,0 +1,26 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Bet {
+  id         Int      @id @default(autoincrement())
+  contractId String   @default("") // Change Int to BigInt
+  status     String   @default("")
+  profit     Float
+  betAmount  Float
+  createdAt  DateTime @default(now())
+}
+
+model StakeDetails {
+  id        Int      @id @default(autoincrement())
+  stake     Float
+  currency  String
+  appId     Int
+  status    String   @default("active")
+  createdAt DateTime @default(now())
+}
