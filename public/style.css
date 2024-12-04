@@ -131,7 +131,7 @@ input {
 }
 
 .btn {
-    width: 100px;
+    min-width: 100px;
     height: 40px;
     cursor: pointer;
     border-radius: 5px;

@@ -216,18 +216,30 @@ const server = app.listen(PORT, () => {
 });
 
 // Initialize WebSocket
-async function initializeForAllUsers() {
-  try {
-      // Fetch all users from the database
-      const users = await prisma.stakeDetails.findMany();
-      // console.log("Stakes",users)
-      // Loop through each user and initialize their WebSocket
-      for (const user of users) {
-          await initializeDerivWebSocket(server, user);
-      }
-  } catch (error) {
-      console.error("Error fetching users:", error);
-  }
+let processedStakeIds = new Set(); // Track IDs of processed stake details
+
+async function initializeNewStakeDetails() {
+    try {
+        // Fetch only stake details that haven't been processed
+        const newStakeDetails = await prisma.stakeDetails.findMany({
+            where: {
+                id: { notIn: Array.from(processedStakeIds) }, 
+                status: 'active'
+            },
+        });
+
+        for (const stakeDetail of newStakeDetails) {
+            // Initialize WebSocket for the new stake detail
+            await initializeDerivWebSocket(server, stakeDetail);
+
+            // Mark this stake detail as processed
+            processedStakeIds.add(stakeDetail.id);
+        }
+    } catch (error) {
+        console.error("Error checking for new stake details:", error);
+    }
 }
 
-initializeForAllUsers();
+// Poll every 5 seconds
+setInterval(initializeNewStakeDetails, 5000);
+

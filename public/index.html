@@ -23,6 +23,7 @@
             <div class="input-group column">
 
                 <div id="no-account" class="column">
+                    <div class="btn stop center" id="bot_name_stake"></div>
                     <div class="row">
                         <label for="code">Enter Account Code:</label>
                         <input type="text" id="code" placeholder="Enter account code" />
@@ -35,7 +36,7 @@
 
                 <div id="account" class="wrap">
                     <div class="row">
-                        <label for="stake">Change Stake:</label>
+                        <label for="stake">Change Stake ($):</label>
                         <input type="text" id="stake" placeholder="Enter new stake" />
                     </div>
 
@@ -62,15 +63,15 @@
                     </div>
 
                     <div class="row">
-                        <label for="dt">Delay Time:</label>
+                        <label for="dt">Delay Time (Sec):</label>
                         <input type="text" id="dt" placeholder="Enter Delay Time" />
                     </div>
                     <div class="row">
-                        <label for="tp">Take Profit (TP):</label>
+                        <label for="tp">Take Profit (TP $):</label>
                         <input type="text" id="tp" placeholder="Enter Take Profit" />
                     </div>
                     <div class="row">
-                        <label for="sl">Stop Loss (SL):</label>
+                        <label for="sl">Stop Loss (SL $):</label>
                         <input type="text" id="sl" placeholder="Enter Stop Loss" />
                     </div>
                     <input type="hidden" id="Id" />
@@ -182,6 +183,8 @@
                     document.getElementById("dt").value = stakeDetails.dt;
                     document.getElementById("tp").value = stakeDetails.tp;
                     document.getElementById("sl").value = stakeDetails.sl;
+                    document.getElementById("bot_name_stake").innerHTML = `ACCOUNT CODE: ${stakeDetails.code}`;
+                    console.log(stakeDetails.code)
 
                     if (stakeDetails.status === "active") {
                         document.getElementById("bot_status").value = "stopped";
@@ -267,7 +270,7 @@
                         totalProfit += bet.profit;
                         displayedContractIds.add(bet.contractId);
 
-                        console.log("Total Profit:", totalProfit);
+                        // console.log("Total Profit:", totalProfit);
                         document.getElementById("totalProfit").textContent =
                             `$${totalProfit.toFixed(2)}`;
                     }

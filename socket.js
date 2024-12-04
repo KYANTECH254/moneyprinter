@@ -1,21 +1,27 @@
 const WebSocket = require("ws");
 const prisma = require("./prisma");
+const userStates = new Map();
 
 async function initializeDerivWebSocket(server, user) {
-    let stake, currency, appId, bot_status, originalStake, dt, sl, tp, token;
-    const betHistory = []; // Array to track the last 4 bets (win or loss)
+    userStates.set(user.id, {
+        betPlaced: false, dontTrade: false, ongoingContractId: null, crashState: false, isHandlingCrash: false, statusChecked: false,
+        previousPrice: null, crashDetected: false, betHistory: [], lastResult: '', stake: 0, currency: '', appId: '', bot_status: '', originalStake: 0, dt: 0, sl: 0,
+        tp: 0, token: '', message: [], newPrice: null, consecutiveWins: 0, takeProfit: 0, ctotalProfit: 0
+    });
+    const state = userStates.get(user.id);
 
     async function fetchPlayDataWithTimeout() {
         try {
             // Create a promise for the fetch operation
             const fetchPlayData = new Promise(async (resolve, reject) => {
                 const play_data = await prisma.stakeDetails.findFirst({
-                    where: { id: user.id },
+                    where: { id: user.id, status: "active", },
                     orderBy: {
                         createdAt: "desc",
+
                     },
                 });
-    
+
                 if (!play_data) {
                     reject("No play data found.");
                 } else {
@@ -23,15 +29,15 @@ async function initializeDerivWebSocket(server, user) {
                     // console.log("All data:",play_data)
                 }
             });
-    
+
             // Set timeout for 5 seconds (adjust as needed)
-            const timeout = new Promise((_, reject) => 
+            const timeout = new Promise((_, reject) =>
                 setTimeout(() => reject("Timeout: Database fetch operation took too long."), 5000)
             );
-    
+
             // Use Promise.race to handle the fetch and the timeout together
             const play_data = await Promise.race([fetchPlayData, timeout]);
-    
+
             // Return the data to be used outside the function
             return {
                 stake: play_data.stake,
@@ -44,54 +50,53 @@ async function initializeDerivWebSocket(server, user) {
                 token: play_data.token,
                 dt: play_data.dt,
             };
-    
+
         } catch (err) {
             console.log("Error fetching play data:", err);
             return null;
         }
     }
-    
+
     // Fetch data when the app is launched and set variables globally
     async function initializeData() {
         const playData = await fetchPlayDataWithTimeout();
         if (playData) {
-            stake = playData.stake;
-            originalStake = playData.originalStake;
-            currency = playData.currency;
-            appId = playData.appId;
-            bot_status = playData.bot_status;
-            sl = playData.sl;
-            tp = playData.tp;
-            token = playData.token;
-            dt = playData.dt;
-    
-            console.log("One",stake, currency, appId, bot_status, originalStake, token);
+            state.stake = playData.stake;
+            state.originalStake = playData.originalStake;
+            state.currency = playData.currency;
+            state.appId = playData.appId;
+            state.bot_status = playData.bot_status;
+            state.sl = playData.sl;
+            state.tp = playData.tp;
+            state.token = playData.token;
+            state.dt = playData.dt;
+
+            console.log("One", state.stake, state.currency, state.appId, state.bot_status, state.originalStake, state.token);
         }
     }
-    
+
     // First fetch when the app is launched
     initializeData();
-    
+
     // Set interval to refetch data every 5 seconds
     setInterval(async () => {
         const playData = await fetchPlayDataWithTimeout();
         if (playData) {
-            stake = playData.stake;
-            originalStake = playData.originalStake;
-            currency = playData.currency;
-            appId = playData.appId;
-            bot_status = playData.bot_status;
-            sl = playData.sl;
-            tp = playData.tp;
-            token = playData.token;
-            dt = playData.dt;
-    
-            console.log("Two",stake, currency, appId, bot_status, originalStake, token);
+            state.stake = playData.stake;
+            state.originalStake = playData.originalStake;
+            state.currency = playData.currency;
+            state.appId = playData.appId;
+            state.bot_status = playData.bot_status;
+            state.sl = playData.sl;
+            state.tp = playData.tp;
+            state.token = playData.token;
+            state.dt = playData.dt;
+
+            console.log("Two", state.stake, state.currency, state.appId, state.bot_status, state.originalStake, state.token);
         }
     }, 5000);
-    
 
-    if (bot_status === "stopped") return;
+    if (state.bot_status === "stopped") return;
 
     const socketUrl = process.env.SOCKET_URL;
     const derivId = process.env.DERIV_ID;
@@ -103,26 +108,24 @@ async function initializeDerivWebSocket(server, user) {
         );
         return;
     }
-    if (!appId) {
-        appId = derivId;
+
+    if (!state.appId) {
+        state.appId = derivId;
     }
 
-    const derivWs = new WebSocket(`${socketUrl}${appId}`);
-    let betPlaced = false;
-    let ongoingContractId = null;
-
+    const derivWs = new WebSocket(`${socketUrl}${user.appId}`);
     derivWs.on("open", () => {
-        console.log("Connected to Deriv WebSocket API");
+        console.log(`WebSocket opened for stake ID: ${user.token}`);
 
-        derivWs.send(JSON.stringify({ authorize: token }));
-        derivWs.send(JSON.stringify({ subscribe: 1, ticks: currency }));
+        derivWs.send(JSON.stringify({ authorize: user.token }));
+        derivWs.send(JSON.stringify({ subscribe: 1, ticks: user.currency }));
 
         setInterval(() => {
-            if (ongoingContractId !== null) {
+            if (state.ongoingContractId !== null) {
                 derivWs.send(
                     JSON.stringify({
                         proposal_open_contract: 1,
-                        contract_id: ongoingContractId,
+                        contract_id: state.ongoingContractId,
                     })
                 );
             }
@@ -134,11 +137,11 @@ async function initializeDerivWebSocket(server, user) {
     });
 
     derivWs.on("message", (event) => {
-        const message = JSON.parse(event);
-        console.log("Message Event:", message);
-        handleTickData(message);
-        handleContractStatus(message);
-        handleBetPlacement(message);
+        state.message = JSON.parse(event);
+        // console.log("Message Event:", message);
+        handleTickData(state.message);
+        handleContractStatus(state.message);
+        handleBetPlacement(state.message);
     });
 
     derivWs.on("error", (error) => {
@@ -149,49 +152,43 @@ async function initializeDerivWebSocket(server, user) {
         console.log("Deriv WebSocket closed.");
     });
 
-    let previousPrice = null; // Keep track of the previous price across ticks
-    let crashState = false;  // Track crash state
-    let dontTrade = false;
-    let isHandlingCrash = false;
-    let statusChecked = false;
-
     async function handleTickData(message) {
-        if (message.tick && message.tick.symbol === currency) {
-            const newPrice = parseFloat(message.tick.quote);
+        if (message.tick && message.tick.symbol === state.currency) {
+            state.newPrice = parseFloat(message.tick.quote);
 
             try {
                 // If a crash is detected, we need to wait for 7 seconds before resetting
-                if (crashState === true && !isHandlingCrash) {
-                    console.log("Multiplier crashed. Waiting 7 seconds before resetting...");
+                if (state.crashState === true && !state.isHandlingCrash) {
+                    console.log(`Multiplier crashed. Waiting ${state.dt} seconds before resetting...`);
 
-                    isHandlingCrash = true;
+                    state.isHandlingCrash = true;
 
                     // Use setTimeout to handle the reset after 7 seconds
                     setTimeout(() => {
                         try {
                             console.log("Crash handled. Ready for the next round.");
-                            isHandlingCrash = false;
-                            crashState = false;
-                            dontTrade = false;
+                            state.isHandlingCrash = false;
+                            state.crashState = false;
+                            state.dontTrade = false;
                             console.log("Everything okay. Placing a new bet...");
-                            placeBet(stake);
+                            placeBet(state.stake);
                         } catch (error) {
                             console.error("Error resetting crash state:", error);
                         }
-                    }, dt);
+                    }, state.dt);
 
                     return; // Skip further tick processing while handling crash state
                 }
 
-                if (!isHandlingCrash) {
+                if (!state.isHandlingCrash) {
                     // If previousPrice is null (i.e., first tick), just set it to the newPrice
-                    if (previousPrice === null) {
-                        previousPrice = newPrice;
+                    if (state.previousPrice === null) {
+                        state.previousPrice = state.newPrice;
                         return; // Exit early, since we need at least two ticks to calculate a change
                     }
 
                     // Calculate price change
-                    const priceChangePercentage = ((newPrice - previousPrice) / previousPrice) * 100;
+                    const priceChangePercentage = ((state.newPrice - state.previousPrice) / state.previousPrice) * 100;
                     const priceChangeThreshold = 0.04863;
 
                     if (Math.abs(priceChangePercentage) <= priceChangeThreshold) {
@@ -199,12 +196,12 @@ async function initializeDerivWebSocket(server, user) {
                         console.log("Price within threshold. No crash detected.");
                     } else {
                         // Handle crash and place a new bet
-                        if (crashState === false || betPlaced === false) {
-                            crashState = true;
+                        if (state.crashState === false || state.betPlaced === false) {
+                            state.crashState = true;
                         }
                     }
                     // Update the previousPrice after handling logic
-                    previousPrice = newPrice;
+                    state.previousPrice = state.newPrice;
                 }
 
             } catch (error) {
@@ -214,76 +211,94 @@ async function initializeDerivWebSocket(server, user) {
     }
 
     async function placeBet(stake) {
-        if (betPlaced && dontTrade === true) return;
+        if (state.betPlaced && state.dontTrade === true && state.bot_status === "stopped") return;
 
-        if (betHistory.length === 3) {
-            betHistory.shift(); // Remove oldest bet result
+        if (state.betHistory.length === 3) {
+            state.betHistory.shift(); // Remove oldest bet result
         }
-        
+
         // Check for two consecutive wins ('w w')
-        if (betHistory.length >= 2 && betHistory.slice(-2).every(entry => entry === 'w')) {
-            betHistory.length = 0; // Clear the array
-            betHistory.push('w'); // Add one 'w' to the array for the next round
+        if (state.betHistory.length >= 2 && state.betHistory.slice(-2).every(entry => entry === 'w')) {
+            state.betHistory.length = 0; // Clear the array
+            state.betHistory.push('w'); // Add one 'w' to the array for the next round
         }
-        
-        const lastResult = betHistory[betHistory.length - 1];
-        
-        // Initialize the stake based on the result of the last bet
-        let consecutiveWins = 0;
-        for (let i = betHistory.length - 1; i >= 0; i--) {
-            if (betHistory[i] === 'w') {
-                consecutiveWins++;
+
+        state.lastResult = state.betHistory[state.betHistory.length - 1];
+
+        for (let i = state.betHistory.length - 1; i >= 0; i--) {
+            if (state.betHistory[i] === 'w') {
+                state.consecutiveWins++;
             } else {
-                break; 
+                break;
             }
         }
-        
+
         // Adjust stake based on consecutive wins or loss
-        if (lastResult === 'w' && consecutiveWins === 1) {
+        if (state.lastResult === 'w' && state.consecutiveWins === 1) {
             // First win: Double the stake
-            stake = originalStake * 2;
-        } else if (lastResult === 'w' && consecutiveWins === 2) {
+            stake = state.originalStake * 2;
+        } else if (state.lastResult === 'w' && state.consecutiveWins === 2) {
             // Second win: Double the stake again
-            stake = originalStake * 4;
-        } else if (lastResult === 'l') {
+            stake = state.originalStake * 4;
+        } else if (state.lastResult === 'l') {
             // Loss: Keep the original stake
-            stake = originalStake;
+            stake = state.originalStake;
         }
-        
+
         // If two wins in a row ('w w'), reset stake to original for the next bet
-        if (betHistory.slice(-2).every(entry => entry === 'w')) {
-            stake = originalStake;
+        if (state.betHistory.slice(-2).every(entry => entry === 'w')) {
+            stake = state.originalStake;
         }
 
         const canContinueTrading = await checkTpAndTotalProfit();
         if (!canContinueTrading) {
+            const checkstatus = await prisma.stakeDetails.findUnique({
+                where: {
+                    id: user.id,
+                }
+            })
+
+            if (checkstatus.status === "active") {
+                const updatedb = await prisma.stakeDetails.update({
+                    where: {
+                        id: user.id,
+                    },
+                    data: {
+                        status: "stopped",
+                    }
+                })
+            }
+
             console.log("Stopping further trades.");
-            return; 
+            return;
         }
-                
-        console.log("Array history:", betHistory)
-        console.log("Placing bet with stake:", stake);
 
-        const takeProfit = stake * 1.5 - stake;
+        console.log("Array history:", state.betHistory)
+        console.log("Placing bet with stake:", stake, "Account:", state.token);
 
-        const proposalMsg = {
-            proposal: 1,
-            amount: stake,
-            contract_type: "ACCU",
-            currency: "USD",
-            basis: "stake",
-            growth_rate: 0.05,
-            limit_order: {
-                take_profit: takeProfit.toFixed(2),
-            },
-            duration_unit: "s",
-            product_type: "basic",
-            symbol: "R_100",
-        };
+        if (state.bot_status === "active") {
+            state.takeProfit = stake * 1.5 - stake;
 
-        derivWs.send(JSON.stringify(proposalMsg));
-        console.log("Bet:",proposalMsg)
-        betPlaced = true;
+            const proposalMsg = {
+                proposal: 1,
+                amount: stake,
+                contract_type: "ACCU",
+                currency: "USD",
+                basis: "stake",
+                growth_rate: 0.05,
+                limit_order: {
+                    take_profit: state.takeProfit.toFixed(2),
+                },
+                duration_unit: "s",
+                product_type: "basic",
+                symbol: state.currency,
+            };
+
+            derivWs.send(JSON.stringify(proposalMsg));
+            console.log("Bet:", proposalMsg)
+            state.betPlaced = true;
+        }
+
     }
 
     async function handleBetPlacement(message) {
@@ -308,11 +323,10 @@ async function initializeDerivWebSocket(server, user) {
                         "Trade successfully placed! Contract ID:",
                         buyResp.contract_id
                     );
-                    ongoingContractId = buyResp.contract_id;
-                    statusChecked = false;
+                    state.ongoingContractId = buyResp.contract_id;
+                    state.statusChecked = false;
                 }
                 break;
-
 
             default:
                 break;
@@ -320,7 +334,7 @@ async function initializeDerivWebSocket(server, user) {
     }
 
     async function handleContractStatus(message) {
-        if (dontTrade === true) return;
+        if (state.dontTrade === true) return;
         if (message.msg_type === "proposal_open_contract") {
             const proposal = message.proposal_open_contract;
             if (!proposal) return;
@@ -332,9 +346,9 @@ async function initializeDerivWebSocket(server, user) {
             console.log(`Profit: ${profit}`);
             console.log(`Bet Amount: ${buy_price}`);
 
-            if (statusChecked === false) {
+            if (state.statusChecked === false) {
                 if (status === "won" || status === "lost") {
-                    betHistory.push(status === "won" ? 'w' : 'l');
+                    state.betHistory.push(status === "won" ? 'w' : 'l');
 
                     const existingBet = await prisma.bet.findFirst({
                         where: { contractId: contract_id.toString() },
@@ -345,7 +359,7 @@ async function initializeDerivWebSocket(server, user) {
                             data: {
                                 contractId: contract_id.toString(),
                                 status,
-                                token:token,
+                                token: state.token,
                                 profit: parseFloat(profit),
                                 betAmount: parseFloat(buy_price),
                                 createdAt: new Date(),
@@ -355,14 +369,11 @@ async function initializeDerivWebSocket(server, user) {
                     } else {
                         console.log(`Bet with contractId ${contract_id} already exists. Skipping insertion.`);
                     }
-                    dontTrade = true;
-                    statusChecked = true;
+                    state.dontTrade = true;
+                    state.statusChecked = true;
                 }
             }
-
-
-            betPlaced = false;
-
+            state.betPlaced = false;
         }
     }
 
@@ -370,30 +381,31 @@ async function initializeDerivWebSocket(server, user) {
         try {
             // Fetch the latest StakeDetails to get tp, sl, and updatedAt
             const stakeDetails = await prisma.stakeDetails.findFirst({
-                where: { status: 'active' },
+
+                where: { status: 'active', token: state.token },
                 orderBy: { updatedAt: 'desc' }, // Get the most recent active stake
             });
-    
+
             if (!stakeDetails) {
                 console.log("No active stake details found.");
                 return true; // Continue placing trades if no active stake is found
             }
-    
+
             // Convert tp and sl to numbers
-            const tpValue = Number(stakeDetails.tp); // Convert tp to number
-            const slValue = Number(stakeDetails.sl); // Convert sl to number
-    
+            state.tp = Number(stakeDetails.tp); // Convert tp to number
+            state.sl = Number(stakeDetails.sl); // Convert sl to number
+
             // If tp or sl are empty (not provided), continue trading
-            if (!tpValue && !slValue) {
+            if (!state.tp && !state.sl) {
                 console.log("TP and SL are empty, continuing to place trades.");
                 return true; // Continue trading
             }
-    
+
             // Fetch the total profit since the last stake update
             const totalProfit = await calculateTotalProfit(stakeDetails.updatedAt);
-    
+
             // Check if tp or sl is exceeded
-            if ((tpValue && totalProfit >= tpValue) || (slValue && totalProfit <= -slValue)) {
+            if ((state.tp && totalProfit >= state.tp) || (state.sl && totalProfit <= -state.sl)) {
                 console.log(`TP or SL condition met. Total profit: ${totalProfit}`);
                 return false; // Stop trading as TP or SL condition is met
             } else {
@@ -405,23 +417,24 @@ async function initializeDerivWebSocket(server, user) {
             return true; // Continue trading in case of an error
         }
     }
-    
+
     async function calculateTotalProfit(updatedAtTimestamp) {
         try {
             const bets = await prisma.bet.findMany({
                 where: {
-                    createdAt: { gte: updatedAtTimestamp }, // Filter bets after the updatedAt timestamp
+                    token: state.token,
+                    createdAt: { gte: updatedAtTimestamp },
                 },
             });
-    
-            const totalProfit = bets.reduce((acc, bet) => acc + bet.profit, 0); // Sum the profits of all bets
-            return totalProfit;
+
+            state.ctotalProfit = bets.reduce((acc, bet) => acc + bet.profit, 0); // Sum the profits of all bets
+            return state.ctotalProfit;
         } catch (err) {
             console.error("Error calculating total profit:", err);
             return 0; // If there's an error, assume no profit
         }
     }
-    
+
 }
 
 

@@ -21,7 +21,7 @@
           <label for="code">Enter Account Code:</label>
           <input type="text" id="code" placeholder="Enter account code" />
         </div>
-        <label for="stake">Stake Amount:</label>
+        <label for="stake">Stake Amount ($):</label>
         <input type="number" id="stake" value="1" placeholder="Enter stake amount" required />
       </div>
       <div class="input-group">
@@ -48,15 +48,15 @@
         </div>
 
         <div class="row">
-          <label for="dt">Delay Time:</label>
-          <input type="text" id="dt" value="2" placeholder="Enter Delay Time" />
+          <label for="dt">Delay Time (Sec):</label>
+          <input type="text" id="dt" value="1" placeholder="Enter Delay Time" />
         </div>
         <div class="row">
-          <label for="tp">Take Profit (TP):</label>
+          <label for="tp">Take Profit ($ TP):</label>
           <input type="text" id="tp" placeholder="Enter Take Profit" />
         </div>
         <div class="row">
-          <label for="sl">Stop Loss (SL):</label>
+          <label for="sl">Stop Loss ($ SL):</label>
           <input type="text" id="sl" placeholder="Enter Stop Loss" />
         </div>
       </div>
@@ -71,7 +71,11 @@
           </div>
         </div>
 
-        <a href="/" class="profit">Back</a>
+        <div class="wrap">
+          <a href="/" class="profit">Back</a>
+          <a href="/tokens" class="profit" id="checkTokens">Check Deriv Tokens</a>
+        </div>
+
       </div>
 
 
@@ -79,6 +83,15 @@
   </main>
 
   <script>
+    function checkAccounts() {
+      const accounts = JSON.parse(localStorage.getItem("accounts"));
+      if (accounts.accounts.length !== 0) {
+        document.getElementById("checkTokens").style.display = "block";
+      } else {
+        document.getElementById("checkTokens").style.display = "none";
+      }
+    }
+
     function getToken() {
       document.getElementById("getTokenBtn").addEventListener("click", async () => {
         const TOKENS_ID = "66222";
@@ -134,7 +147,7 @@
             return;
           }
           alert(`Stake credentials created successfully!`);
-          console.log(result); 
+          console.log(result);
 
           localStorage.setItem("token", result.token);
           localStorage.setItem("appId", result.appId);
@@ -149,6 +162,7 @@
     }
 
     getToken()
+    checkAccounts()
 
     // Get the current domain
     const currentDomain = window.location.origin;
