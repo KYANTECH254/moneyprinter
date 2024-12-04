@@ -119,17 +119,17 @@ app.post("/api/stake", async (req, res) => {
 
 app.post("/api/codeinfo", async (req, res) => {
   const { code } = req.body;
-console.log("code",code)
+  console.log("code", code)
   try {
     const findex = await prisma.stakeDetails.findFirst({
       where: {
-        code:code
+        code: code
       }
     })
 
     if (findex) {
       return res.json(findex);
-    } 
+    }
 
     return res.status(200).json({ error: "Code Info not found!" });
   } catch (error) {
@@ -140,7 +140,7 @@ console.log("code",code)
 
 // Route to update stake details by ID (ID in the body)
 app.put("/api/updatestake", async (req, res) => {
-  const { id, stake, currency,token, appId, status, dt, sl, tp } = req.body;
+  const { id, stake, currency, token, appId, status, dt, sl, tp } = req.body;
 
   if (!id || !stake || !currency || !appId || !status) {
     return res.status(200).json({
@@ -219,25 +219,29 @@ const server = app.listen(PORT, () => {
 let processedStakeIds = new Set();
 
 async function initializeNewStakeDetails() {
-    try {
-        // Fetch only stake details that haven't been processed
-        const newStakeDetails = await prisma.stakeDetails.findMany({
-            where: {
-                id: { notIn: Array.from(processedStakeIds) }, 
-                status: 'active'
-            },
-        });
+  try {
+    // Fetch only stake details that haven't been processed
+    const newStakeDetails = await prisma.stakeDetails.findMany({
+      where: {
+        id: { notIn: Array.from(processedStakeIds) },
+        status: 'active'
+      },
+    });
 
-        for (const stakeDetail of newStakeDetails) {
-            // Initialize WebSocket for the new stake detail
-            await initializeDerivWebSocket(server, stakeDetail);
-
-            // Mark this stake detail as processed
-            processedStakeIds.add(stakeDetail.id);
-        }
-    } catch (error) {
-        console.error("Error checking for new stake details:", error);
+    if (newStakeDetails.length === 0) {
+      return; // No new stake details, exit the function early
     }
+
+    for (const stakeDetail of newStakeDetails) {
+      // Initialize WebSocket for the new stake detail
+      await initializeDerivWebSocket(server, stakeDetail);
+
+      // Mark this stake detail as processed
+      processedStakeIds.add(stakeDetail.id);
+    }
+  } catch (error) {
+    console.error("Error checking for new stake details:", error);
+  }
 }
 
 setInterval(initializeNewStakeDetails, 5000);

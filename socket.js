@@ -53,6 +53,12 @@ async function initializeDerivWebSocket(server, user) {
 
         } catch (err) {
             console.log("Error fetching play data:", err);
+            state,dontTrade = true;
+            state.stake = 0;
+            state.crashState = true;
+            state.ongoingContractId = 0;
+            state.bot_status = "stopped";
+            state.token = "";
             return null;
         }
     }
