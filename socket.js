@@ -181,9 +181,9 @@ async function initializeDerivWebSocket(server, user) {
                         } catch (error) {
                             console.error("Error resetting crash state:", error);
                         }
-                    }, state.dt);
+                    }, parseFloat(state.dt) * 1000);
 
-                    return; // Skip further tick processing while handling crash state
+                    return; 
                 }
 
                 if (!state.isHandlingCrash) {
