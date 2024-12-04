@@ -156,6 +156,7 @@
                 const token = localStorage.getItem('token');
                 if (!appid || !token) {
                     document.getElementById("account").style.display = "none";
+                    document.getElementById("bot_name_stake").innerHTML = `NO ACCOUNT`;
                     return
                 };
 
