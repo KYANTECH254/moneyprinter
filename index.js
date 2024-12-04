@@ -210,7 +210,7 @@ app.get("/tokens", async (req, res) => {
 //   console.log("All bets deleted");
 // });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 4003;
 const server = app.listen(PORT, () => {
   console.log(`> Server running at PORT:${PORT}`);
 });
