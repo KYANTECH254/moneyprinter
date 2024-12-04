@@ -216,7 +216,7 @@ const server = app.listen(PORT, () => {
 });
 
 // Initialize WebSocket
-let processedStakeIds = new Set(); // Track IDs of processed stake details
+let processedStakeIds = new Set();
 
 async function initializeNewStakeDetails() {
     try {
@@ -240,6 +240,5 @@ async function initializeNewStakeDetails() {
     }
 }
 
-// Poll every 5 seconds
 setInterval(initializeNewStakeDetails, 5000);
 
