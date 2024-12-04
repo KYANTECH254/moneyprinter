@@ -1,45 +1,110 @@
 const WebSocket = require("ws");
 const prisma = require("./prisma");
 
-async function initializeDerivWebSocket(server) {
-    let stake, currency, appId, bot_status, originalStake;
+async function initializeDerivWebSocket(server, user) {
+    let stake, currency, appId, bot_status, originalStake, dt, sl, tp, token;
     const betHistory = []; // Array to track the last 4 bets (win or loss)
 
-    try {
-        const play_data = await prisma.stakeDetails.findFirst({
-            orderBy: {
-                createdAt: "desc",
-            },
-        });
-
-        if (!play_data) {
-            console.log("No play data found.");
-            return;
+    async function fetchPlayDataWithTimeout() {
+        try {
+            // Create a promise for the fetch operation
+            const fetchPlayData = new Promise(async (resolve, reject) => {
+                const play_data = await prisma.stakeDetails.findFirst({
+                    where: { id: user.id },
+                    orderBy: {
+                        createdAt: "desc",
+                    },
+                });
+    
+                if (!play_data) {
+                    reject("No play data found.");
+                } else {
+                    resolve(play_data);
+                    // console.log("All data:",play_data)
+                }
+            });
+    
+            // Set timeout for 5 seconds (adjust as needed)
+            const timeout = new Promise((_, reject) => 
+                setTimeout(() => reject("Timeout: Database fetch operation took too long."), 5000)
+            );
+    
+            // Use Promise.race to handle the fetch and the timeout together
+            const play_data = await Promise.race([fetchPlayData, timeout]);
+    
+            // Return the data to be used outside the function
+            return {
+                stake: play_data.stake,
+                originalStake: play_data.stake,
+                currency: play_data.currency,
+                appId: play_data.appId,
+                bot_status: play_data.status,
+                sl: play_data.sl,
+                tp: play_data.tp,
+                token: play_data.token,
+                dt: play_data.dt,
+            };
+    
+        } catch (err) {
+            console.log("Error fetching play data:", err);
+            return null;
         }
-
-        stake = play_data.stake;
-        originalStake = play_data.stake;
-        currency = play_data.currency;
-        appId = play_data.appId;
-        bot_status = play_data.status;
-    } catch (err) {
-        console.log("Error fetching play data:", err);
-        return;
     }
-
-    console.log(stake, currency, appId, bot_status, originalStake);
+    
+    // Fetch data when the app is launched and set variables globally
+    async function initializeData() {
+        const playData = await fetchPlayDataWithTimeout();
+        if (playData) {
+            stake = playData.stake;
+            originalStake = playData.originalStake;
+            currency = playData.currency;
+            appId = playData.appId;
+            bot_status = playData.bot_status;
+            sl = playData.sl;
+            tp = playData.tp;
+            token = playData.token;
+            dt = playData.dt;
+    
+            console.log("One",stake, currency, appId, bot_status, originalStake, token);
+        }
+    }
+    
+    // First fetch when the app is launched
+    initializeData();
+    
+    // Set interval to refetch data every 5 seconds
+    setInterval(async () => {
+        const playData = await fetchPlayDataWithTimeout();
+        if (playData) {
+            stake = playData.stake;
+            originalStake = playData.originalStake;
+            currency = playData.currency;
+            appId = playData.appId;
+            bot_status = playData.bot_status;
+            sl = playData.sl;
+            tp = playData.tp;
+            token = playData.token;
+            dt = playData.dt;
+    
+            console.log("Two",stake, currency, appId, bot_status, originalStake, token);
+        }
+    }, 5000);
+    
 
     if (bot_status === "stopped") return;
 
     const socketUrl = process.env.SOCKET_URL;
     const derivId = process.env.DERIV_ID;
-    const token = process.env.TOKEN;
+    const dtoken = process.env.TOKEN;
 
-    if (!socketUrl || !derivId || !token) {
+    if (!socketUrl || !derivId || !dtoken) {
         console.error(
             "Missing environment variables: SOCKET_URL, DERIV_ID, or TOKEN."
         );
         return;
+    }
+    if (!appId) {
+        appId = derivId;
     }
 
     const derivWs = new WebSocket(`${socketUrl}${appId}`);
@@ -61,7 +126,7 @@ async function initializeDerivWebSocket(server) {
                     })
                 );
             }
-        }, 2000);
+        }, 7000);
 
         setInterval(() => {
             derivWs.send(JSON.stringify({ ping: 1 }));
@@ -70,6 +135,7 @@ async function initializeDerivWebSocket(server) {
 
     derivWs.on("message", (event) => {
         const message = JSON.parse(event);
+        console.log("Message Event:", message);
         handleTickData(message);
         handleContractStatus(message);
         handleBetPlacement(message);
@@ -90,7 +156,7 @@ async function initializeDerivWebSocket(server) {
     let statusChecked = false;
 
     async function handleTickData(message) {
-        if (message.tick && message.tick.symbol === "R_100") {
+        if (message.tick && message.tick.symbol === currency) {
             const newPrice = parseFloat(message.tick.quote);
 
             try {
@@ -112,7 +178,7 @@ async function initializeDerivWebSocket(server) {
                         } catch (error) {
                             console.error("Error resetting crash state:", error);
                         }
-                    }, 2000);
+                    }, dt);
 
                     return; // Skip further tick processing while handling crash state
                 }
@@ -148,20 +214,21 @@ async function initializeDerivWebSocket(server) {
     }
 
     async function placeBet(stake) {
-        if (betPlaced && dontTrade === true) return; // Prevent placing a bet if one is already placed
+        if (betPlaced && dontTrade === true) return;
 
-        // Modify stake based on the bet history
-        if (betHistory.length === 4) {
+        if (betHistory.length === 3) {
             betHistory.shift(); // Remove oldest bet result
         }
-
-        if (betHistory.length >= 3 && betHistory.slice(-3).every(entry => entry === 'w')) {
+        
+        // Check for two consecutive wins ('w w')
+        if (betHistory.length >= 2 && betHistory.slice(-2).every(entry => entry === 'w')) {
             betHistory.length = 0; // Clear the array
-            betHistory.push(''); // Add one 'w' to the array
+            betHistory.push('w'); // Add one 'w' to the array for the next round
         }
-
+        
         const lastResult = betHistory[betHistory.length - 1];
-
+        
+        // Initialize the stake based on the result of the last bet
         let consecutiveWins = 0;
         for (let i = betHistory.length - 1; i >= 0; i--) {
             if (betHistory[i] === 'w') {
@@ -170,15 +237,30 @@ async function initializeDerivWebSocket(server) {
                 break; 
             }
         }
-
-        // Double the stake continuously for each win
-        if (lastResult === 'w' && consecutiveWins <= 3) {
-            stake = originalStake * Math.pow(2, consecutiveWins); // Double the stake
+        
+        // Adjust stake based on consecutive wins or loss
+        if (lastResult === 'w' && consecutiveWins === 1) {
+            // First win: Double the stake
+            stake = originalStake * 2;
+        } else if (lastResult === 'w' && consecutiveWins === 2) {
+            // Second win: Double the stake again
+            stake = originalStake * 4;
         } else if (lastResult === 'l') {
-            stake = stake; // Reset to the original stake on loss
+            // Loss: Keep the original stake
+            stake = originalStake;
+        }
+        
+        // If two wins in a row ('w w'), reset stake to original for the next bet
+        if (betHistory.slice(-2).every(entry => entry === 'w')) {
+            stake = originalStake;
         }
 
-
+        const canContinueTrading = await checkTpAndTotalProfit();
+        if (!canContinueTrading) {
+            console.log("Stopping further trades.");
+            return; 
+        }
+                
         console.log("Array history:", betHistory)
         console.log("Placing bet with stake:", stake);
 
@@ -196,10 +278,11 @@ async function initializeDerivWebSocket(server) {
             },
             duration_unit: "s",
             product_type: "basic",
-            symbol: currency,
+            symbol: "R_100",
         };
 
         derivWs.send(JSON.stringify(proposalMsg));
+        console.log("Bet:",proposalMsg)
         betPlaced = true;
     }
 
@@ -262,6 +345,7 @@ async function initializeDerivWebSocket(server) {
                             data: {
                                 contractId: contract_id.toString(),
                                 status,
+                                token:token,
                                 profit: parseFloat(profit),
                                 betAmount: parseFloat(buy_price),
                                 createdAt: new Date(),
@@ -281,6 +365,63 @@ async function initializeDerivWebSocket(server) {
 
         }
     }
+
+    async function checkTpAndTotalProfit() {
+        try {
+            // Fetch the latest StakeDetails to get tp, sl, and updatedAt
+            const stakeDetails = await prisma.stakeDetails.findFirst({
+                where: { status: 'active' },
+                orderBy: { updatedAt: 'desc' }, // Get the most recent active stake
+            });
+    
+            if (!stakeDetails) {
+                console.log("No active stake details found.");
+                return true; // Continue placing trades if no active stake is found
+            }
+    
+            // Convert tp and sl to numbers
+            const tpValue = Number(stakeDetails.tp); // Convert tp to number
+            const slValue = Number(stakeDetails.sl); // Convert sl to number
+    
+            // If tp or sl are empty (not provided), continue trading
+            if (!tpValue && !slValue) {
+                console.log("TP and SL are empty, continuing to place trades.");
+                return true; // Continue trading
+            }
+    
+            // Fetch the total profit since the last stake update
+            const totalProfit = await calculateTotalProfit(stakeDetails.updatedAt);
+    
+            // Check if tp or sl is exceeded
+            if ((tpValue && totalProfit >= tpValue) || (slValue && totalProfit <= -slValue)) {
+                console.log(`TP or SL condition met. Total profit: ${totalProfit}`);
+                return false; // Stop trading as TP or SL condition is met
+            } else {
+                console.log(`Continuing to place trades. Total profit: ${totalProfit}`);
+                return true; // Continue trading
+            }
+        } catch (err) {
+            console.error("Error in checking TP or SL or calculating total profit:", err);
+            return true; // Continue trading in case of an error
+        }
+    }
+    
+    async function calculateTotalProfit(updatedAtTimestamp) {
+        try {
+            const bets = await prisma.bet.findMany({
+                where: {
+                    createdAt: { gte: updatedAtTimestamp }, // Filter bets after the updatedAt timestamp
+                },
+            });
+    
+            const totalProfit = bets.reduce((acc, bet) => acc + bet.profit, 0); // Sum the profits of all bets
+            return totalProfit;
+        } catch (err) {
+            console.error("Error calculating total profit:", err);
+            return 0; // If there's an error, assume no profit
+        }
+    }
+    
 }
 
 

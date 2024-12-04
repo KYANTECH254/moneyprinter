@@ -14,10 +14,36 @@ app.use(cors());
 app.use(bodyParser.json());
 app.use(express.static(path.join(__dirname, "public")));
 
+
+app.get("/acctokens", (req, res) => {
+  const query = req.query;
+
+  // Parse the tokens and account IDs
+  const accounts = [];
+  Object.keys(query).forEach((key) => {
+    const match = key.match(/acct(\d+)/);
+    if (match) {
+      const index = match[1];
+      accounts.push({
+        account_id: query[`acct${index}`],
+        token: query[`token${index}`],
+      });
+    }
+  });
+
+  // Return the extracted data as JSON
+  res.json({ accounts });
+});
+
 // Route to fetch all bets from Prisma
 app.get("/api/bets", async (req, res) => {
+  const { appId, token } = req.query;
+
   try {
     const bets = await prisma.bet.findMany({
+      where: {
+        token: token,
+      },
       orderBy: {
         createdAt: "desc",
       },
@@ -30,10 +56,13 @@ app.get("/api/bets", async (req, res) => {
 });
 
 app.get("/api/getstake", async (req, res) => {
+  const { appId, token } = req.query;
+
   try {
     const Stake = await prisma.stakeDetails.findFirst({
-      orderBy: {
-        createdAt: "desc",
+      where: {
+        token: token,
+        appId: appId
       },
     });
     return res.json(Stake);
@@ -44,14 +73,41 @@ app.get("/api/getstake", async (req, res) => {
 });
 
 app.post("/api/stake", async (req, res) => {
-  const { stake, currency, appId } = req.body;
+  const { stake, currency, appId, token, tp, sl, dt, code } = req.body;
 
   try {
+    const findexc = await prisma.stakeDetails.findFirst({
+      where: {
+        code: code
+      }
+    })
+
+    if (findexc) {
+      return res.status(200).json({ error: "Code exists choose a different one!" });
+    }
+
+    const findex = await prisma.stakeDetails.findFirst({
+      where: {
+        appId: appId,
+        token: token,
+        code: code
+      }
+    })
+
+    if (findex) {
+      return res.json(findex);
+    }
+
     const newStake = await prisma.stakeDetails.create({
       data: {
         stake,
         currency,
         appId,
+        token,
+        dt,
+        tp,
+        sl,
+        code
       },
     });
     return res.json(newStake);
@@ -61,9 +117,30 @@ app.post("/api/stake", async (req, res) => {
   }
 });
 
+app.post("/api/codeinfo", async (req, res) => {
+  const { code } = req.body;
+console.log("code",code)
+  try {
+    const findex = await prisma.stakeDetails.findFirst({
+      where: {
+        code:code
+      }
+    })
+
+    if (findex) {
+      return res.json(findex);
+    } 
+
+    return res.status(200).json({ error: "Code Info not found!" });
+  } catch (error) {
+    console.error("Error getting code Info:", error);
+    return res.status(200).json({ error: "Failed to get code Info" });
+  }
+});
+
 // Route to update stake details by ID (ID in the body)
 app.put("/api/updatestake", async (req, res) => {
-  const { id, stake, currency, appId, status } = req.body;
+  const { id, stake, currency,token, appId, status, dt, sl, tp } = req.body;
 
   if (!id || !stake || !currency || !appId || !status) {
     return res.status(200).json({
@@ -74,13 +151,17 @@ app.put("/api/updatestake", async (req, res) => {
   try {
     const updatedStake = await prisma.stakeDetails.update({
       where: {
-        id: id, // Find the record by the ID in the body
+        id: id,
       },
       data: {
         stake, // Update the stake amount
         currency, // Update the currency
         appId, // Update the application ID
-        status
+        status,
+        token,
+        dt,
+        sl,
+        tp
       },
     });
     return res.json(updatedStake);
@@ -114,6 +195,17 @@ app.get("/create", async (req, res) => {
   }
 });
 
+app.get("/tokens", async (req, res) => {
+  const indexPath = path.join(__dirname, "public", "tokens.html");
+
+  try {
+    await fs.promises.access(indexPath, fs.constants.F_OK);
+    res.sendFile(indexPath); // Serve the HTML file only for the root route
+  } catch (error) {
+    res.status(404).json({ error: "Index file not found" });
+  }
+});
+
 // prisma.bet.deleteMany().then(() => {
 //   console.log("All bets deleted");
 // });
@@ -123,6 +215,19 @@ const server = app.listen(PORT, () => {
   console.log(`> Server running at PORT:${PORT}`);
 });
 
-
 // Initialize WebSocket
-initializeDerivWebSocket(server);
+async function initializeForAllUsers() {
+  try {
+      // Fetch all users from the database
+      const users = await prisma.stakeDetails.findMany();
+      // console.log("Stakes",users)
+      // Loop through each user and initialize their WebSocket
+      for (const user of users) {
+          await initializeDerivWebSocket(server, user);
+      }
+  } catch (error) {
+      console.error("Error fetching users:", error);
+  }
+}
+
+initializeForAllUsers();

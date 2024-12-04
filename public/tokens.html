@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Account Tokens</title>
+    <base id="baseHref" href="">
+    <link rel="stylesheet" href="/style.css">
+</head>
+
+<body>
+    <header>
+        <h1>Account Tokens</h1>
+    </header>
+    <main>
+        <section class="form-container">
+            <h2 id="tokens"></h2>
+            <div id="accounts"></div>
+
+            <div class="column">
+                <a href="/create" class="profit">Create Stake Info</a>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        // Extract query parameters from the current page's URL
+        function getQueryParams() {
+            const params = new URLSearchParams(window.location.search);
+            const query = {};
+            for (const [key, value] of params.entries()) {
+                query[key] = value;
+            }
+            return query;
+        }
+
+        async function fetchAccounts() {
+            try {
+                let data = '';
+                const queryParams = getQueryParams();
+                const queryString = new URLSearchParams(queryParams).toString();
+
+                // Send the query parameters to the /tokens endpoint
+                const response = await fetch(`/acctokens?${queryString}`);
+                const fdata = await response.json();
+
+                // Get the accounts container
+                const accountsDiv = document.getElementById("accounts");
+                const tokensDiv = document.getElementById("tokens")
+                if (fdata.length !== 0) {
+                    localStorage.setItem("accounts", JSON.stringify(fdata)); // Save fdata to localStorage
+                    tokensDiv.innerHTML = `Tokens found: ${fdata.accounts.length}`;
+                    data = fdata; // Assign fdata to data
+                } else {
+                    const ldata = localStorage.getItem("accounts"); // Retrieve the data from localStorage
+                    if (ldata) {
+                        data = JSON.parse(ldata); // Parse the stored data
+                    }
+                }
+
+                if (data.accounts.length === 0) {
+                    tokensDiv.innerHTML = `Tokens found: ${data.accounts.length}`
+                }
+
+
+                // Map data into HTML
+                data.accounts.forEach(({ account_id, token }) => {
+                    // Create a container for each account
+                    const accountContainer = document.createElement("div");
+                    accountContainer.classList.add("account-container");
+
+                    // Create the account info elements
+                    const accountIdElement = document.createElement("p");
+                    accountIdElement.innerHTML = `<strong>Account ID:</strong> ${account_id}`;
+
+                    const tokenElement = document.createElement("p");
+                    tokenElement.innerHTML = `<strong>Token:</strong> ${token}`;
+
+                    // Create the copy button
+                    const copyButton = document.createElement("button");
+                    copyButton.innerText = "Copy Token";
+
+                    copyButton.onclick = () => {
+                        // Copy the token to clipboard
+                        navigator.clipboard.writeText(token)
+                            .then(() => {
+                                // Alert the user that the token has been copied
+                                alert("Token copied");
+                            })
+                            .catch((err) => {
+                                console.error("Error copying token:", err);
+                            });
+                    };
+
+                    // Append elements to the account container
+                    accountContainer.appendChild(accountIdElement);
+                    accountContainer.appendChild(tokenElement);
+                    accountContainer.appendChild(copyButton);
+
+                    // Append the account container to the accounts div
+                    accountsDiv.appendChild(accountContainer);
+                });
+            } catch (error) {
+                console.error("Error fetching accounts:", error);
+            }
+        }
+
+        // Fetch accounts on page load
+        fetchAccounts();
+
+        // Get the current domain
+        const currentDomain = window.location.origin;
+
+        // Set the base href dynamically
+        document.getElementById('baseHref').setAttribute('href', currentDomain);
+
+    </script>
+</body>
+
+</html>
